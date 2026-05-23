@@ -1,0 +1,11 @@
+keywords: "software engineer"
+location: "San Francisco Bay Area"
+limit: 20
+
+llm:
+  model: "gpt-4o-mini"
+
+criteria:
+  reject_company_sizes: ["2-10 employees", "11-50 employees"]
+  max_years_experience: 3
+  require_tech_industry: true
