@@ -1,11 +1,45 @@
-keywords: "software engineer"
-location: "San Francisco Bay Area"
-limit: 20
+search:
+  keywords: software engineer OR AI engineer
+  location: San Francisco Bay Area
+  job_type: full_time     # comma-sep: full_time,part_time,contract,internship,...
+  max_pages: 1           # cap raised to 50 in local fork; LinkedIn returns ~10 jobs per page
+  date_posted: past_24_hours # presets: past_hour | past_24_hours | past_week | past_month, or rNNN seconds
+  sort_by: relevance      # date | relevance
 
-llm:
-  model: "gpt-4o-mini"
+judge:
+  model: "claude-haiku-4-5"  # rolling alias for latest Haiku 4.5; also: claude-sonnet-4-6 | claude-opus-4-7
+  effort: low                          # low | medium | high (Claude Code reasoning effort)
+  phase1_prompt: |
+    You judge a LinkedIn job posting on TWO criteria using only the posting text.
 
-criteria:
-  reject_company_sizes: ["2-10 employees", "11-50 employees"]
-  max_years_experience: 3
-  require_tech_industry: true
+    Output ONLY a JSON object. No prose. No markdown. No code fences. No commentary.
+    Your entire response must start with { and end with }. Nothing before, nothing after.
+
+    Schema:
+    {"is_ai": <bool>, "experience_ok": <bool>, "reason": "<one short sentence>"}
+
+    is_ai: true if the role centers on AI/ML/LLMs/foundation models/data
+      science/AI infrastructure/MLOps/applied AI. Generic backend / full-stack /
+      mobile / frontend roles without explicit AI focus = false.
+
+    experience_ok: true if required experience is 5 years or fewer; also true
+      for "unspecified", "entry level", "new grad", "junior", "internship", and
+      patterns like "3+" or "5+" where the floor is <= 5. False only when the
+      posting clearly demands MORE than 5 years ("6+ years", "7+", "10+",
+      "minimum 8", "senior staff", etc.).
+
+    When evidence is missing, default to true (lenient).
+
+  phase2_prompt: |
+    You judge a LinkedIn company profile on ONE criterion.
+
+    Output ONLY a JSON object. No prose. No markdown. No code fences. No commentary.
+    Your entire response must start with { and end with }. Nothing before, nothing after.
+
+    Schema:
+    {"company_size_ok": <bool>, "reason": "<one short sentence>"}
+
+    company_size_ok: false if the profile states company size is
+      "2-10 employees" or "11-50 employees". Any other size (51-200, 201-500,
+      501-1000, 1001-5000, 5001-10000, 10000+) = true.
+      If size is not stated, default true (lenient).
