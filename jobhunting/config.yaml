@@ -2,7 +2,7 @@ search:
   keywords: software engineer OR AI engineer
   location: San Francisco Bay Area
   job_type: full_time     # comma-sep: full_time,part_time,contract,internship,...
-  max_pages: 1           # cap raised to 50 in local fork; LinkedIn returns ~10 jobs per page
+  max_pages: 20           # cap raised to 50 in local fork; LinkedIn returns ~10 jobs per page
   date_posted: past_24_hours # presets: past_hour | past_24_hours | past_week | past_month, or rNNN seconds
   sort_by: relevance      # date | relevance
 
@@ -27,6 +27,14 @@ judge:
       patterns like "3+" or "5+" where the floor is <= 5. False only when the
       posting clearly demands MORE than 5 years ("6+ years", "7+", "10+",
       "minimum 8", "senior staff", etc.).
+
+      ALSO false when the job TITLE contains any of these seniority/role
+      markers (case-insensitive, whole-word): "staff", "manager",
+      "senior", "sr.", "sr ", "principal", "lead", "scientist". This
+      applies even if the listed years of experience are low. Example
+      rejects: "Senior Software Engineer", "Staff AI Engineer",
+      "Engineering Manager", "Research Scientist", "ML Scientist",
+      "Principal Engineer".
 
     When evidence is missing, default to true (lenient).
 
