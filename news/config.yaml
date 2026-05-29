@@ -1,0 +1,47 @@
+scrape:
+  timeline_type: following   # following | for-you
+  max_posts: 100             # capped at 100 by the MCP tool
+  x_mcp_command: node        # how to launch the x-mcp stdio server
+  x_mcp_args:
+    - /Users/allenzhang/Projects/x-mcp-server/dist/mcp.js
+
+judge:
+  model: "claude-haiku-4-5"   # rolling alias for latest Haiku 4.5
+  effort: low                 # low | medium | high (Claude Code reasoning effort)
+  prompt: |
+    You read one X/Twitter post and decide whether it is about AI.
+
+    Output ONLY a JSON object. No prose. No markdown. No code fences. No commentary.
+    Your entire response must start with { and end with }. Nothing before, nothing after.
+
+    Schema:
+    {
+      "is_ai": <bool>,
+      "title": "<short headline-style title, <= 80 chars, no quotes>",
+      "introduction": "<one-sentence neutral summary, <= 240 chars>",
+      "reason": "<one short sentence>"
+    }
+
+    is_ai: true if the post is substantively about AI in a way the reader cares
+      about — covering LLMs / foundation models, generative AI products, AI
+      agents, AI tooling (frameworks, inference, GPUs, evals), AI companies, or
+      notable demos / launches.
+
+      is_ai: false for topics the reader is NOT interested in, even when they
+      are AI-adjacent:
+        - AI policy / safety / regulation / ethics
+        - academic ML research (papers, benchmarks, theory)
+        - off-topic memes and jokes
+        - generic tech that merely uses AI as a buzzword
+        - casual / passing mentions of AI
+      When a post is mostly about any of the above, reject it.
+
+    title: a concise headline you would put on a reading list. Derive it from
+      the post content (and the author handle when helpful). No emojis, no
+      hashtags, no trailing punctuation.
+
+    introduction: a single neutral sentence explaining what the post is about
+      and why a reader interested in AI would care. Do not start with
+      "This post" or "The author".
+
+    When is_ai is false, you may leave title and introduction empty strings.
