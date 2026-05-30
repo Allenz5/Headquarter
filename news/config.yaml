@@ -1,6 +1,6 @@
 scrape:
   timeline_type: following   # following | for-you
-  max_posts: 100             # capped at 100 by the MCP tool
+  timeframe: 24              # hours: scrape posts from now back this many hours (no post-count cap)
   x_mcp_command: node        # how to launch the x-mcp stdio server
   x_mcp_args:
     - /Users/allenzhang/Projects/x-mcp-server/dist/mcp.js

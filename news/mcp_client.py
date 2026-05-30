@@ -84,17 +84,27 @@ class XClient:
     async def scrape_timeline(
         self,
         timeline_type: str = "following",
-        max_posts: int = 20,
+        max_posts: int | None = None,
+        max_age_hours: float | None = None,
     ) -> dict[str, Any]:
         """Pass-through to the x-mcp `scrape_timeline` tool.
 
+        Pass max_age_hours to bound the scrape by time (scrape from now back
+        this many hours, stopping at the first older original post). Reposts are
+        ignored for the cutoff by the server. max_posts is an optional hard cap.
+
         Returns a dict shaped like:
           {timeline, count, avgEngagement, posts: [
-              {postId, author, content, url, timestamp, likes, retweets, engagement},
+              {postId, author, content, url, timestamp, likes, retweets,
+               engagement, isRetweet, retweetedFrom},
               ...
           ]}
         """
-        args = {"type": timeline_type, "maxPosts": max_posts}
+        args: dict[str, Any] = {"type": timeline_type}
+        if max_posts is not None:
+            args["maxPosts"] = max_posts
+        if max_age_hours is not None:
+            args["maxAgeHours"] = max_age_hours
         attempt = 0
         while True:
             attempt += 1

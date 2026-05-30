@@ -30,9 +30,8 @@ RESULTS_MD = HERE / "results.md"
 # subprocesses at once.
 LLM_PARALLEL_LIMIT = 5
 
-# Only keep posts from the last this-many hours. The Following timeline is
-# reverse-chronological, so once we hit an older post we stop and drop the rest.
-MAX_POST_AGE_HOURS = 24
+# Fallback time window (hours) when config doesn't set scrape.timeframe.
+DEFAULT_TIMEFRAME_HOURS = 24
 
 
 def _parse_post_timestamp(value: Any) -> datetime | None:
@@ -122,32 +121,33 @@ async def fetch_node(state: GraphState) -> dict[str, Any]:
     cfg = state["config"]["scrape"]
     client = state["x"]
     timeline = cfg.get("timeline_type", "following")
-    max_posts = int(cfg.get("max_posts", 20))
-    print(f"[fetch] x-mcp scrape_timeline type={timeline} max_posts={max_posts}")
-    data = await client.scrape_timeline(timeline_type=timeline, max_posts=max_posts)
+    timeframe = float(cfg.get("timeframe", DEFAULT_TIMEFRAME_HOURS))
+    print(f"[fetch] x-mcp scrape_timeline type={timeline} timeframe={timeframe}h")
+    # The scraper bounds the scroll by time (stops past the window). No post cap.
+    data = await client.scrape_timeline(timeline_type=timeline, max_age_hours=timeframe)
     posts = data.get("posts") or []
     print(f"[fetch] got {len(posts)} posts (avgEngagement={data.get('avgEngagement')})")
 
-    # Early stop: the timeline is reverse-chronological by *appearance* time, so
-    # once we hit an old post we drop it and everything after. But a repost
-    # carries the ORIGINAL tweet's timestamp (not when it was reposted into the
-    # feed), so an old-but-recently-reposted item must not trigger the stop —
-    # keep reposts and only stop at the first original post older than the cutoff.
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_POST_AGE_HOURS)
+    # Keep originals from the last `timeframe` hours; ignore reposts entirely
+    # (a repost's timestamp is the original tweet's, not its feed-appearance
+    # time, so it can't be dated reliably and the user doesn't want them).
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=timeframe)
     kept: list[dict[str, Any]] = []
+    reposts = 0
+    too_old = 0
     for p in posts:
-        ts = _parse_post_timestamp(p.get("timestamp"))
         if p.get("isRetweet"):
-            kept.append(p)
+            reposts += 1
             continue
+        ts = _parse_post_timestamp(p.get("timestamp"))
         if ts is not None and ts < cutoff:
-            print(
-                f"[fetch] hit original post older than {MAX_POST_AGE_HOURS}h "
-                f"(@{p.get('author')} @ {ts.isoformat()}); stopping early "
-                f"with {len(kept)} recent post(s)"
-            )
-            break
+            too_old += 1
+            continue
         kept.append(p)
+    print(
+        f"[fetch] kept {len(kept)} original post(s) within {timeframe}h "
+        f"(ignored {reposts} repost(s), dropped {too_old} older)"
+    )
     return {"posts": kept}
 
 
@@ -274,12 +274,13 @@ async def run(config_path: Path, fetch_only: bool = False) -> None:
         if fetch_only:
             data = await x.scrape_timeline(
                 timeline_type=scrape_cfg.get("timeline_type", "following"),
-                max_posts=int(scrape_cfg.get("max_posts", 20)),
+                max_age_hours=float(scrape_cfg.get("timeframe", DEFAULT_TIMEFRAME_HOURS)),
             )
             posts = data.get("posts") or []
             print(f"\n[fetch-only] {len(posts)} posts:")
             for p in posts:
-                print(f"  - @{p.get('author')}: {(p.get('content') or '')[:120]!r}")
+                rt = " (RT)" if p.get("isRetweet") else ""
+                print(f"  - @{p.get('author')}{rt}: {(p.get('content') or '')[:120]!r}")
                 print(f"    {p.get('url')}")
             return
 
