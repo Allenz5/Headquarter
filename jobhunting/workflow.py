@@ -35,6 +35,11 @@ LLM_PARALLEL_LIMIT = 5
 BASE_INTERVAL = 3.0       # seconds between any two LinkedIn MCP calls
 SENTINEL_FLOOR = 60.0     # when empty-result detected, jump interval to at least this
 MAX_INTERVAL = 300.0      # absolute cap
+# When a detail/company fetch comes back empty (a rate-limit tell), retry it
+# this many times — each retry waits the now-bumped interval. Without this, a
+# throttled job is silently dropped for the whole run, which is how a fully
+# rate-limited run produces an empty "0 of 0" shortlist with no error.
+FETCH_MAX_RETRIES = 3
 
 # JSON guardrail: how many extra attempts when LLM returns non-JSON
 JSON_MAX_RETRIES = 2
@@ -102,19 +107,31 @@ class ThrottledLinkedIn:
 
     async def get_job_details(self, jid: str) -> dict[str, Any] | None:
         async with self._lock:
-            await self._wait_turn()
-            r = await self._client.get_job_details(jid)
-            if self._job_empty(r):
-                self._bump("job-details", jid)
-            return r
+            last: dict[str, Any] | None = None
+            for attempt in range(FETCH_MAX_RETRIES + 1):
+                await self._wait_turn()
+                r = await self._client.get_job_details(jid)
+                if not self._job_empty(r):
+                    return r
+                last = r
+                if attempt < FETCH_MAX_RETRIES:
+                    self._bump("job-details", jid)
+                    print(f"[rate] empty job-details for {jid!r}; retry {attempt + 1}/{FETCH_MAX_RETRIES}")
+            return last
 
     async def get_company_profile(self, slug: str) -> dict[str, Any] | None:
         async with self._lock:
-            await self._wait_turn()
-            r = await self._client.get_company_profile(slug)
-            if self._company_empty(r):
-                self._bump("company-profile", slug)
-            return r
+            last: dict[str, Any] | None = None
+            for attempt in range(FETCH_MAX_RETRIES + 1):
+                await self._wait_turn()
+                r = await self._client.get_company_profile(slug)
+                if not self._company_empty(r):
+                    return r
+                last = r
+                if attempt < FETCH_MAX_RETRIES:
+                    self._bump("company-profile", slug)
+                    print(f"[rate] empty company-profile for {slug!r}; retry {attempt + 1}/{FETCH_MAX_RETRIES}")
+            return last
 
 
 def _job_posting_text(details: dict[str, Any]) -> str:
@@ -228,16 +245,28 @@ async def phase1_node(state: GraphState) -> dict[str, Any]:
     # Step A: serial scrape (ThrottledLinkedIn enforces the 3s gap)
     t0 = time.monotonic()
     fetched: list[tuple[str, dict[str, Any]]] = []
+    empty = 0
     for jid in job_ids:
         try:
             details = await client.get_job_details(jid)
         except Exception as e:
             print(f"[phase1] {jid} fetch failed: {e}")
             continue
-        if details:
+        # An empty posting (after retries) is a rate-limit drop, not a real job —
+        # skip it rather than judge the LLM on blank text.
+        if details and _job_posting_text(details).strip():
             fetched.append((jid, details))
+        else:
+            empty += 1
+            print(f"[phase1] {jid} returned empty posting (rate-limited?); skipped")
     t_scrape = time.monotonic() - t0
     print(f"[phase1] scraped {len(fetched)}/{len(job_ids)} job details in {t_scrape:.1f}s")
+    if job_ids and len(fetched) < max(1, len(job_ids) // 2):
+        print(
+            f"[phase1] WARNING: only {len(fetched)}/{len(job_ids)} details scraped "
+            f"({empty} empty) — likely LinkedIn rate-limiting. The shortlist will be "
+            f"incomplete; consider rerunning later or lowering search.max_pages."
+        )
 
     # Step B: judge in parallel (capped concurrency to avoid CLI subprocess flood)
     llm_sem = asyncio.Semaphore(LLM_PARALLEL_LIMIT)

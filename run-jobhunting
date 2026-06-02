@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Launch the LinkedIn job-hunting workflow.
+# Any extra args are passed through to workflow.py (e.g. --search-only).
+set -e
+cd "$(dirname "$0")"
+.venv/bin/python jobhunting/workflow.py --config jobhunting/config.yaml "$@"
