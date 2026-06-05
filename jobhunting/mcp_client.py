@@ -5,15 +5,30 @@ from __future__ import annotations
 import json
 import os
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+# A multi-page job search can run several minutes. FastMCP enforces a per-tool
+# timeout server-side (TOOL_TIMEOUT, default 180s) and aborts the call when it
+# is exceeded — discarding every page scraped so far. Raise it so a full search
+# completes, and keep the client read timeout comfortably above it so the client
+# waits for the server rather than tearing the call down first. Both are
+# overridable from the environment.
+TOOL_TIMEOUT_SECONDS = float(os.environ.get("TOOL_TIMEOUT", "600"))
+CLIENT_READ_TIMEOUT = timedelta(seconds=TOOL_TIMEOUT_SECONDS + 60)
+
+
 def _server_params() -> StdioServerParameters:
     # Installed via `uv tool install linkedin-scraper-mcp`,
     # which puts the `linkedin-scraper-mcp` console script on PATH.
-    return StdioServerParameters(command="linkedin-scraper-mcp", args=[])
+    return StdioServerParameters(
+        command="linkedin-scraper-mcp",
+        args=[],
+        env={**os.environ, "TOOL_TIMEOUT": str(TOOL_TIMEOUT_SECONDS)},
+    )
 
 
 @asynccontextmanager
@@ -51,7 +66,9 @@ class LinkedInClient:
         Only `keywords` is required by the MCP tool.
         """
         args = {k: v for k, v in kwargs.items() if v is not None}
-        result = await self.session.call_tool("search_jobs", args)
+        result = await self.session.call_tool(
+            "search_jobs", args, read_timeout_seconds=CLIENT_READ_TIMEOUT
+        )
         data = _unwrap(result)
         return data if isinstance(data, dict) else {}
 

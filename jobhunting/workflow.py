@@ -227,7 +227,16 @@ async def search_node(state: GraphState) -> dict[str, Any]:
     cfg = state["config"]["search"]
     client = state["linkedin"]
     print(f"[search] keywords={cfg['keywords']!r} max_pages={cfg.get('max_pages', 3)}")
-    data = await client.search_jobs(**cfg)
+    # The server stops paginating before its tool timeout and returns the pages
+    # it already has, so a normal run yields a (possibly partial) dict. Still
+    # guard against a hard transport/timeout error so the workflow degrades to
+    # "no jobs this run" instead of crashing with a traceback.
+    try:
+        data = await client.search_jobs(**cfg)
+    except Exception as e:
+        print(f"[search] search_jobs failed ({type(e).__name__}: {e}); "
+              f"continuing with no job ids this run")
+        data = {}
     job_ids = [str(j) for j in (data.get("job_ids") or [])]
     print(f"[search] LinkedIn URL: {data.get('url')}")
     print(f"[search] got {len(job_ids)} job ids")
