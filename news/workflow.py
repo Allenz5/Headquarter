@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,19 +15,24 @@ from typing import Any, TypedDict
 
 import yaml
 from dotenv import load_dotenv
-from langchain_claude_code import ChatClaudeCode
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from mcp_client import NotionClient, XClient, notion_session, x_session
 
 HERE = Path(__file__).parent
+ROOT = HERE.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from codex_headless import ChatCodexHeadless
+
 DEFAULT_CONFIG = HERE / "config.yaml"
 DEFAULT_ENV = HERE / ".env"
 RESULTS_JSON = HERE / "results.json"
 RESULTS_MD = HERE / "results.md"
 
-# Bound concurrent LLM calls so we don't spawn too many Claude Code CLI
+# Bound concurrent LLM calls so we don't spawn too many Codex headless
 # subprocesses at once.
 LLM_PARALLEL_LIMIT = 5
 
@@ -60,7 +66,7 @@ class GraphState(TypedDict, total=False):
     config: dict[str, Any]
     posts: list[dict[str, Any]]   # raw x-mcp posts, plus phase verdict fields
     x: XClient
-    llm: ChatClaudeCode
+    llm: ChatCodexHeadless
     notion: NotionClient | None
     notion_database_id: str | None
 
@@ -79,7 +85,7 @@ def _extract_json(text: str) -> dict[str, Any] | None:
 
 
 async def _llm_json(
-    llm: ChatClaudeCode,
+    llm: ChatCodexHeadless,
     system_prompt: str,
     user_content: str,
     on_error: dict[str, Any],
@@ -264,6 +270,13 @@ def build_graph():
 
 async def run(config_path: Path, fetch_only: bool = False) -> None:
     load_dotenv(DEFAULT_ENV)
+
+    # The judge runs via Codex headless (`codex exec`), which uses the local
+    # Codex subscription login. Drop legacy vendor credentials inherited from
+    # the shell so no old path can be selected accidentally.
+    if os.environ.pop("ANTHROPIC_API_KEY", None):
+        print("[setup] dropped ANTHROPIC_API_KEY so the judge uses Codex headless")
+
     config = yaml.safe_load(config_path.read_text())
 
     scrape_cfg = config.get("scrape", {})
@@ -290,7 +303,7 @@ async def run(config_path: Path, fetch_only: bool = False) -> None:
             llm_kwargs["model"] = judge_cfg["model"]
         if judge_cfg.get("effort"):
             llm_kwargs["effort"] = judge_cfg["effort"]
-        llm = ChatClaudeCode(**llm_kwargs)
+        llm = ChatCodexHeadless(**llm_kwargs)
 
         notion_token = os.environ.get("NOTION_ACCESS_TOKEN")
         notion_db_id = os.environ.get("NOTION_DATABASE_ID")

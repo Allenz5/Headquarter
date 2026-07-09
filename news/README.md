@@ -17,11 +17,13 @@ START → fetch → judge (parallel) → write → notion → END
 # from repo root
 .venv/bin/pip install -r /dev/stdin <<'EOF'
 langgraph
-langchain-claude-code
 pyyaml
 python-dotenv
 mcp
 EOF
+
+# One-time Codex login for the headless judge
+codex login
 
 # Build the local x-mcp-server once (Playwright will need browsers too)
 cd ~/Projects/x-mcp-server && npm install && npm run build

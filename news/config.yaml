@@ -6,8 +6,8 @@ scrape:
     - /Users/allenzhang/Projects/x-mcp-server/dist/mcp.js
 
 judge:
-  model: "claude-haiku-4-5"   # rolling alias for latest Haiku 4.5
-  effort: low                 # low | medium | high (Claude Code reasoning effort)
+  model: default              # default uses your Codex subscription's configured model
+  effort: low                 # none | low | medium | high (Codex reasoning effort)
   prompt: |
     You read one X/Twitter post and decide whether it is about AI.
 

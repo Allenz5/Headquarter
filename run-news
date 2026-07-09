@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Launch the X following timeline → AI reading-list news workflow.
-# Any extra args are passed through to workflow.py (e.g. --fetch-only).
-set -e
-cd "$(dirname "$0")"
-.venv/bin/python news/workflow.py --config news/config.yaml "$@"

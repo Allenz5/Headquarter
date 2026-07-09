@@ -7,8 +7,8 @@ search:
   sort_by: relevance      # date | relevance
 
 judge:
-  model: "claude-haiku-4-5"  # rolling alias for latest Haiku 4.5; also: claude-sonnet-4-6 | claude-opus-4-7
-  effort: low                          # low | medium | high (Claude Code reasoning effort)
+  model: default                       # default uses your Codex subscription's configured model
+  effort: low                          # none | low | medium | high (Codex reasoning effort)
   phase1_prompt: |
     You judge a LinkedIn job posting on TWO criteria using only the posting text.
 
